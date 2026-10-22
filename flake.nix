@@ -14,7 +14,13 @@
     in
     {
       packages = forAllSystems (pkgs: rec {
-        paperclip = pkgs.callPackage ./package.nix { };
+        paperclip = (pkgs.callPackage ./package.nix { }).overrideAttrs (_: {
+          passthru = {
+            tests = nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isx86_64 {
+              inherit (self.checks.x86_64-linux) vm;
+            };
+          };
+        });
         default = paperclip;
       });
 
@@ -32,22 +38,28 @@
 
       formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
 
-      checks = forAllSystems (pkgs: {
-        package = self.packages.${pkgs.stdenv.hostPlatform.system}.paperclip;
-        lint =
-          pkgs.runCommand "lint"
-            {
-              nativeBuildInputs = [
-                pkgs.statix
-                pkgs.deadnix
-              ];
-            }
-            ''
-              cd ${self}
-              statix check .
-              deadnix --fail .
-              touch $out
-            '';
-      });
+      checks = forAllSystems (
+        pkgs:
+        {
+          package = self.packages.${pkgs.stdenv.hostPlatform.system}.paperclip;
+          lint =
+            pkgs.runCommand "lint"
+              {
+                nativeBuildInputs = [
+                  pkgs.statix
+                  pkgs.deadnix
+                ];
+              }
+              ''
+                cd ${self}
+                statix check .
+                deadnix --fail .
+                touch $out
+              '';
+        }
+        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isx86_64 {
+          vm = import ./tests/vm.nix { inherit pkgs self; };
+        }
+      );
     };
 }

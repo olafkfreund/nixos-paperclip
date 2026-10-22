@@ -246,11 +246,12 @@ in
           PAPERCLIP_CONFIG = configFile;
           NODE_ENV = "production";
           SERVE_UI = "true";
-          DATABASE_URL =
-            if cfg.database.createLocally then
-              "postgresql:///paperclip?host=/run/postgresql"
-            else
-              cfg.database.url;
+          DATABASE_URL = if cfg.database.createLocally then "postgresql:///paperclip" else cfg.database.url;
+        }
+        // lib.optionalAttrs cfg.database.createLocally {
+          # postgres.js ignores a ?host= query parameter but honours PGHOST.
+          PGHOST = "/run/postgresql";
+          PGUSER = cfg.user;
         }
         // cfg.environment;
 
@@ -278,6 +279,7 @@ in
           LockPersonality = true;
           RestrictAddressFamilies = [
             "AF_UNIX"
+            "AF_NETLINK" # os.networkInterfaces() fails with EAFNOSUPPORT without it
             "AF_INET"
             "AF_INET6"
           ];

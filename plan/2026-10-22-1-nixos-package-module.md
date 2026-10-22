@@ -39,7 +39,9 @@ spec: spec/2026-10-22-1-nixos-package-module.md
 - Database: when `createLocally`, `services.postgresql.enable`,
   `ensureDatabases = [ "paperclip" ]`, `ensureUsers = [{ name = cfg.user;
   ensureDBOwnership = true; }]`, and env
-  `DATABASE_URL=postgresql:///paperclip?host=/run/postgresql`. Otherwise
+  `DATABASE_URL=postgresql:///paperclip`, `PGHOST=/run/postgresql` and
+  `PGUSER=cfg.user` (postgres.js ignores a `?host=` query parameter and fell
+  back to TCP `::1`, found by the VM test). Otherwise
   `DATABASE_URL = cfg.database.url`.
 - Auth secret: unless `environmentFile` sets `BETTER_AUTH_SECRET`,
   `ExecStartPre` creates `${stateDir}/auth-secret` once (umask 077,
@@ -53,7 +55,9 @@ spec: spec/2026-10-22-1-nixos-package-module.md
 - Hardening: `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`,
   `PrivateDevices`, `NoNewPrivileges`, `ProtectKernel*`,
   `ProtectControlGroups`, `RestrictNamespaces`, `LockPersonality`,
-  `RestrictAddressFamilies = AF_UNIX AF_INET AF_INET6`,
+  `RestrictAddressFamilies = AF_UNIX AF_NETLINK AF_INET AF_INET6` (AF_NETLINK
+  added after the VM test: Node's `os.networkInterfaces()` failed with
+  EAFNOSUPPORT and the server exited at startup),
   `SystemCallFilter = @system-service`, `ReadWritePaths = stateDir`. **No**
   `MemoryDenyWriteExecute`, because the Node JIT needs it off.
 - Updates track npm `dist-tags.latest` (stable only), checked daily. The
