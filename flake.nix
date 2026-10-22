@@ -33,6 +33,7 @@
       formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
 
       checks = forAllSystems (pkgs: {
+        package = self.packages.${pkgs.stdenv.hostPlatform.system}.paperclip;
         lint =
           pkgs.runCommand "lint"
             {

@@ -96,6 +96,16 @@ spec: spec/2026-10-22-1-nixos-package-module.md
    `embedded-postgres` optional binaries may fail patchelf: remove
    `node_modules/@embedded-postgres` in `postInstall` (they are unused).
    Record any of these in this plan if used.
+   **Done (recorded deviations):** `devDependencies` contains the unpublished
+   `@paperclipai/paperclip-runner` (it is vendored under `dist/vendor/`), so
+   `npm install` failed with ETARGET. The lockfile was generated from
+   `package.json` with `devDependencies` deleted (`jq 'del(.devDependencies)'`),
+   and `postPatch` applies the same `jq` (via `lib.getExe jq`, since the
+   npm-deps derivation also runs `postPatch`) before copying the lockfile.
+   `makeWrapper` runs `$dir/dist/index.js` by absolute path (no `--chdir`,
+   so the service keeps its own working directory). `sharp` loads, bundled
+   deps were fine, and `embedded-postgres` binaries run, so no patchelf hook
+   and no `@embedded-postgres` removal were needed.
 
 3. `module.nix`: implement exactly the options and behaviour under
    "Approved decisions". Render the config with `(pkgs.formats.json { })
