@@ -39,7 +39,9 @@ spec: spec/2026-10-22-1-nixos-package-module.md
 - Database: when `createLocally`, `services.postgresql.enable`,
   `ensureDatabases = [ "paperclip" ]`, `ensureUsers = [{ name = cfg.user;
   ensureDBOwnership = true; }]`, and env
-  `DATABASE_URL=postgresql:///paperclip?host=/run/postgresql`. Otherwise
+  `DATABASE_URL=postgresql:///paperclip`, `PGHOST=/run/postgresql` and
+  `PGUSER=cfg.user` (postgres.js ignores a `?host=` query parameter and fell
+  back to TCP `::1`, found by the VM test). Otherwise
   `DATABASE_URL = cfg.database.url`.
 - Auth secret: unless `environmentFile` sets `BETTER_AUTH_SECRET`,
   `ExecStartPre` creates `${stateDir}/auth-secret` once (umask 077,
@@ -53,7 +55,9 @@ spec: spec/2026-10-22-1-nixos-package-module.md
 - Hardening: `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`,
   `PrivateDevices`, `NoNewPrivileges`, `ProtectKernel*`,
   `ProtectControlGroups`, `RestrictNamespaces`, `LockPersonality`,
-  `RestrictAddressFamilies = AF_UNIX AF_INET AF_INET6`,
+  `RestrictAddressFamilies = AF_UNIX AF_NETLINK AF_INET AF_INET6` (AF_NETLINK
+  added after the VM test: Node's `os.networkInterfaces()` failed with
+  EAFNOSUPPORT and the server exited at startup),
   `SystemCallFilter = @system-service`, `ReadWritePaths = stateDir`. **No**
   `MemoryDenyWriteExecute`, because the Node JIT needs it off.
 - Updates track npm `dist-tags.latest` (stable only), checked daily. The
@@ -96,6 +100,16 @@ spec: spec/2026-10-22-1-nixos-package-module.md
    `embedded-postgres` optional binaries may fail patchelf: remove
    `node_modules/@embedded-postgres` in `postInstall` (they are unused).
    Record any of these in this plan if used.
+   **Done (recorded deviations):** `devDependencies` contains the unpublished
+   `@paperclipai/paperclip-runner` (it is vendored under `dist/vendor/`), so
+   `npm install` failed with ETARGET. The lockfile was generated from
+   `package.json` with `devDependencies` deleted (`jq 'del(.devDependencies)'`),
+   and `postPatch` applies the same `jq` (via `lib.getExe jq`, since the
+   npm-deps derivation also runs `postPatch`) before copying the lockfile.
+   `makeWrapper` runs `$dir/dist/index.js` by absolute path (no `--chdir`,
+   so the service keeps its own working directory). `sharp` loads, bundled
+   deps were fine, and `embedded-postgres` binaries run, so no patchelf hook
+   and no `@embedded-postgres` removal were needed.
 
 3. `module.nix`: implement exactly the options and behaviour under
    "Approved decisions". Render the config with `(pkgs.formats.json { })
@@ -136,6 +150,10 @@ spec: spec/2026-10-22-1-nixos-package-module.md
    → verify by `./update.sh` making no diff now.
    Traps: `sed` patterns must each match exactly one line; fail loudly
    (`grep -q` before `sed`) if not.
+   **Done (recorded deviations):** `hash` comes from `nix hash file --sri` on
+   the downloaded tarball (no `nix-prefetch`); `-p` is `nodejs_24
+   prefetch-npm-deps gnused gnugrep jq curl`, and the lockfile uses the step 2
+   `jq` recipe. The `lint` check also runs `shellcheck --shell=bash update.sh`.
 
 6. `.github/workflows/ci.yml`, `.github/workflows/update.yml`:
    - `ci.yml`: on push to `main` and on PRs. `actions/checkout@v4`,
@@ -151,6 +169,10 @@ spec: spec/2026-10-22-1-nixos-package-module.md
    README must say to set a `PAT`/app token secret (`UPDATE_TOKEN`) for CI
    to run on update PRs. The workflow uses
    `token: ${{ secrets.UPDATE_TOKEN || github.token }}`.
+   **Done (recorded deviations):** `ci.yml` adds a udev rule step making
+   `/dev/kvm` user-accessible before installing Nix (needed for the VM test).
+   `update.yml` sets `nix_path: nixpkgs=channel:nixos-unstable` for the
+   `nix-shell` shebang and takes the PR title from `update.sh`'s last line.
 
 7. `README.md`: what it is, flake input usage, a minimal module example,
    an option table (copy from the spec), a `settings`/`environment`
@@ -184,3 +206,31 @@ Seven file-editing steps, so per policy the `coder` agent (Sonnet)
 implements them one step at a time. A fresh Opus agent reviews the diff
 against this plan. The PR (once there is a remote) says which steps the
 coder did.
+
+## Review fixes (Opus review of the diff against this plan)
+
+- `module.nix`: order after and require `postgresql.target`, not
+  `postgresql.service`, because `ensureDatabases`/`ensureUsers` run in
+  `postgresql-setup.service`. Also `RestartSec = 5`, `UMask = "0077"`,
+  `StateDirectoryMode = "0750"` (state was world-readable). The auth secret
+  is written through a temp file and regenerated if empty. The `database.url`
+  assertion also accepts `environmentFile`.
+- `tests/vm.nix`: also asserts `/var/lib/paperclip` is mode 750.
+- `flake.nix`: unchanged. The review said `passthru` dropped `npmDeps`, but
+  the override args have no `passthru` and `npmDeps` is still exposed.
+- `update.sh`: validates the version string, and checks all patterns before
+  editing anything; the lockfile is copied last.
+- `update.yml`: `shell: bash` (pipefail), and the PR step only runs when there
+  is a title. `ci.yml`: `permissions: contents: read`.
+
+## Follow-up (user request 2026-10-22: publish, run workflows, full README)
+
+- `update.yml` runs `nix flake check -L` on the bumped tree (with the KVM udev
+  step) before `create-pull-request`, so a nightly update verifies itself
+  without `UPDATE_TOKEN`. `UPDATE_TOKEN` stays optional, to make `ci.yml` run on
+  the PR too.
+- `ci.yml` also runs nightly (`0 4 * * *`) and on `workflow_dispatch`.
+- Repo setting: Actions workflow permissions read/write, with "allow GitHub
+  Actions to create pull requests" enabled.
+- `README.md` rewritten as the install, configure and verify guide, with the
+  workflows documented.

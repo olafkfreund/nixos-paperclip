@@ -1,0 +1,52 @@
+name: Update
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # /dev/kvm exists on hosted runners but is not user-accessible; the VM test needs it.
+      - run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: cachix/install-nix-action@v31
+        with:
+          # update.sh uses a nix-shell shebang, which needs <nixpkgs>.
+          nix_path: nixpkgs=channel:nixos-unstable
+      - id: update
+        # Explicit bash enables pipefail, so a failing update.sh fails the step.
+        shell: bash
+        run: |
+          msg=$(./update.sh | tail -n 1)
+          echo "$msg"
+          # "updated paperclip: <old> -> <new>" becomes the PR title; empty when up to date.
+          case "$msg" in
+            "updated "*) echo "title=${msg#updated }" >> "$GITHUB_OUTPUT" ;;
+          esac
+      # Verify the bump here (build + lint + VM test), so a PR only appears when it works,
+      # even without UPDATE_TOKEN (PRs opened with GITHUB_TOKEN do not trigger ci.yml).
+      - if: steps.update.outputs.title != ''
+        run: nix flake check -L
+      - uses: peter-evans/create-pull-request@v7
+        if: steps.update.outputs.title != ''
+        with:
+          # Optional: a PAT or app token makes ci.yml also run on the PR.
+          token: ${{ secrets.UPDATE_TOKEN || github.token }}
+          branch: update/paperclip
+          title: ${{ steps.update.outputs.title }}
+          commit-message: ${{ steps.update.outputs.title }}
+          body: |
+            Automated update of the Paperclip npm package.
+
+            Verified in the Update workflow run before this PR was opened:
+            package build, lint and the NixOS VM test (`nix flake check`).
