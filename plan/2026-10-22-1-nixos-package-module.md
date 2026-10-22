@@ -206,3 +206,19 @@ Seven file-editing steps, so per policy the `coder` agent (Sonnet)
 implements them one step at a time. A fresh Opus agent reviews the diff
 against this plan. The PR (once there is a remote) says which steps the
 coder did.
+
+## Review fixes (Opus review of the diff against this plan)
+
+- `module.nix`: order after and require `postgresql.target`, not
+  `postgresql.service`, because `ensureDatabases`/`ensureUsers` run in
+  `postgresql-setup.service`. Also `RestartSec = 5`, `UMask = "0077"`,
+  `StateDirectoryMode = "0750"` (state was world-readable). The auth secret
+  is written through a temp file and regenerated if empty. The `database.url`
+  assertion also accepts `environmentFile`.
+- `tests/vm.nix`: also asserts `/var/lib/paperclip` is mode 750.
+- `flake.nix`: unchanged. The review said `passthru` dropped `npmDeps`, but
+  the override args have no `passthru` and `npmDeps` is still exposed.
+- `update.sh`: validates the version string, and checks all patterns before
+  editing anything; the lockfile is copied last.
+- `update.yml`: `shell: bash` (pipefail), and the PR step only runs when there
+  is a title. `ci.yml`: `permissions: contents: read`.

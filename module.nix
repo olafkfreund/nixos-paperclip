@@ -23,7 +23,8 @@ let
   # Never put the secret in the store: generate it once in the state dir.
   genSecret = pkgs.writeShellScript "paperclip-gen-secret" ''
     umask 077
-    [ -e ${authSecret} ] || ${pkgs.coreutils}/bin/head -c 48 /dev/urandom | ${pkgs.coreutils}/bin/base64 > ${authSecret}
+    # Write via a temp file so an interrupted run never leaves an empty secret.
+    [ -s ${authSecret} ] || { ${pkgs.coreutils}/bin/head -c 48 /dev/urandom | ${pkgs.coreutils}/bin/base64 > ${authSecret}.tmp && mv ${authSecret}.tmp ${authSecret}; }
   '';
 
   start = pkgs.writeShellScript "paperclip-start" ''
@@ -169,8 +170,8 @@ in
     {
       assertions = [
         {
-          assertion = cfg.database.createLocally || cfg.database.url != null;
-          message = "services.paperclip: set database.url when database.createLocally is false.";
+          assertion = cfg.database.createLocally || cfg.database.url != null || cfg.environmentFile != null;
+          message = "services.paperclip: set database.url (or DATABASE_URL in environmentFile) when database.createLocally is false.";
         }
         {
           assertion = cfg.exposure != "public" || cfg.publicUrl != null;
@@ -236,8 +237,9 @@ in
       systemd.services.paperclip = {
         description = "Paperclip agent orchestration server";
         wantedBy = [ "multi-user.target" ];
-        after = [ "network.target" ] ++ lib.optional cfg.database.createLocally "postgresql.service";
-        requires = lib.optional cfg.database.createLocally "postgresql.service";
+        # postgresql.target also covers postgresql-setup.service (ensureDatabases/ensureUsers).
+        after = [ "network.target" ] ++ lib.optional cfg.database.createLocally "postgresql.target";
+        requires = lib.optional cfg.database.createLocally "postgresql.target";
         path = cfg.extraPackages;
 
         environment = {
@@ -259,10 +261,13 @@ in
           ExecStartPre = genSecret;
           ExecStart = start;
           Restart = "on-failure";
+          RestartSec = 5;
+          UMask = "0077";
           User = cfg.user;
           Group = cfg.group;
           WorkingDirectory = cfg.stateDir;
           StateDirectory = mkIf defaultStateDir "paperclip";
+          StateDirectoryMode = "0750";
           EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
 
           ProtectSystem = "strict";

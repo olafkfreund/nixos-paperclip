@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 
 current=$(sed -n 's/^  version = "\(.*\)";$/\1/p' package.nix)
 latest=$(npm view @paperclipai/server dist-tags.latest)
+[[ $latest =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected version '$latest'" >&2; exit 1; }
 if [ "$current" = "$latest" ]; then
   echo "paperclip is up to date ($current)"
   exit 0
@@ -21,16 +22,15 @@ tar -xzf "$tmp/server.tgz" -C "$tmp" package/package.json
 mkdir "$tmp/lock"
 jq 'del(.devDependencies)' "$tmp/package/package.json" > "$tmp/lock/package.json"
 (cd "$tmp/lock" && npm install --package-lock-only --omit=dev --ignore-scripts)
-cp "$tmp/lock/package-lock.json" package-lock.json
-depsHash=$(prefetch-npm-deps package-lock.json)
+depsHash=$(prefetch-npm-deps "$tmp/lock/package-lock.json")
 
-# Each pattern must match exactly one line, or we fail before editing.
-replace() {
-  [ "$(grep -c "$1" package.nix)" = 1 ] || { echo "pattern '$1' must match exactly one line" >&2; exit 1; }
-  sed -i "s|$1.*|$2|" package.nix
-}
-replace '^  version = ' "  version = \"$latest\";"
-replace '^    hash = ' "    hash = \"$hash\";"
-replace '^  npmDepsHash = ' "  npmDepsHash = \"$depsHash\";"
+# Check every pattern before touching any file, so a failure leaves the repo unchanged.
+for pat in '^  version = ' '^    hash = ' '^  npmDepsHash = '; do
+  [ "$(grep -c "$pat" package.nix)" = 1 ] || { echo "pattern '$pat' must match exactly one line" >&2; exit 1; }
+done
+sed -i -e "s|^  version = .*|  version = \"$latest\";|" \
+  -e "s|^    hash = .*|    hash = \"$hash\";|" \
+  -e "s|^  npmDepsHash = .*|  npmDepsHash = \"$depsHash\";|" package.nix
+cp "$tmp/lock/package-lock.json" package-lock.json
 
 echo "updated paperclip: $current -> $latest"

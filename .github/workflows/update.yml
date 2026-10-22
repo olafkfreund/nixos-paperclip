@@ -19,6 +19,8 @@ jobs:
           # update.sh uses a nix-shell shebang, which needs <nixpkgs>.
           nix_path: nixpkgs=channel:nixos-unstable
       - id: update
+        # Explicit bash enables pipefail, so a failing update.sh fails the step.
+        shell: bash
         run: |
           msg=$(./update.sh | tail -n 1)
           echo "$msg"
@@ -27,6 +29,7 @@ jobs:
             "updated "*) echo "title=${msg#updated }" >> "$GITHUB_OUTPUT" ;;
           esac
       - uses: peter-evans/create-pull-request@v7
+        if: steps.update.outputs.title != ''
         with:
           # PRs opened with GITHUB_TOKEN do not trigger CI; set UPDATE_TOKEN to a PAT or app token.
           token: ${{ secrets.UPDATE_TOKEN || github.token }}
