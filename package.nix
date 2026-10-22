@@ -9,7 +9,7 @@
 
 buildNpmPackage rec {
   pname = "paperclip";
-  version = "2026.1005.0";
+  version = "2026.1012.0";
 
   src = fetchurl {
     url = "https://registry.npmjs.org/@paperclipai/server/-/server-${version}.tgz";
