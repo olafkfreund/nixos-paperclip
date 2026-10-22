@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 issue: 1
 spec: spec/2026-10-22-1-nixos-package-module.md
 ---
