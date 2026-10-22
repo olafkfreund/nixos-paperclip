@@ -222,3 +222,15 @@ coder did.
   editing anything; the lockfile is copied last.
 - `update.yml`: `shell: bash` (pipefail), and the PR step only runs when there
   is a title. `ci.yml`: `permissions: contents: read`.
+
+## Follow-up (user request 2026-10-22: publish, run workflows, full README)
+
+- `update.yml` runs `nix flake check -L` on the bumped tree (with the KVM udev
+  step) before `create-pull-request`, so a nightly update verifies itself
+  without `UPDATE_TOKEN`. `UPDATE_TOKEN` stays optional, to make `ci.yml` run on
+  the PR too.
+- `ci.yml` also runs nightly (`0 4 * * *`) and on `workflow_dispatch`.
+- Repo setting: Actions workflow permissions read/write, with "allow GitHub
+  Actions to create pull requests" enabled.
+- `README.md` rewritten as the install, configure and verify guide, with the
+  workflows documented.

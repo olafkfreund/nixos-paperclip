@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Nightly rebuild catches breakage from nixpkgs or the runner even without new commits.
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
