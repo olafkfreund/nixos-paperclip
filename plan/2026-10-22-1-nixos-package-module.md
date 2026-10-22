@@ -150,6 +150,10 @@ spec: spec/2026-10-22-1-nixos-package-module.md
    → verify by `./update.sh` making no diff now.
    Traps: `sed` patterns must each match exactly one line; fail loudly
    (`grep -q` before `sed`) if not.
+   **Done (recorded deviations):** `hash` comes from `nix hash file --sri` on
+   the downloaded tarball (no `nix-prefetch`); `-p` is `nodejs_24
+   prefetch-npm-deps gnused gnugrep jq curl`, and the lockfile uses the step 2
+   `jq` recipe. The `lint` check also runs `shellcheck --shell=bash update.sh`.
 
 6. `.github/workflows/ci.yml`, `.github/workflows/update.yml`:
    - `ci.yml`: on push to `main` and on PRs. `actions/checkout@v4`,

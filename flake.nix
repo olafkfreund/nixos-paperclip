@@ -48,13 +48,15 @@
                 nativeBuildInputs = [
                   pkgs.statix
                   pkgs.deadnix
+                  pkgs.shellcheck
                 ];
               }
               ''
-                cd ${self}
-                statix check .
-                deadnix --fail .
-                touch $out
+                  cd ${self}
+                  statix check .
+                  deadnix --fail .
+                shellcheck --shell=bash update.sh
+                  touch $out
               '';
         }
         // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isx86_64 {
