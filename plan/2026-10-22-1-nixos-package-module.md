@@ -169,6 +169,10 @@ spec: spec/2026-10-22-1-nixos-package-module.md
    README must say to set a `PAT`/app token secret (`UPDATE_TOKEN`) for CI
    to run on update PRs. The workflow uses
    `token: ${{ secrets.UPDATE_TOKEN || github.token }}`.
+   **Done (recorded deviations):** `ci.yml` adds a udev rule step making
+   `/dev/kvm` user-accessible before installing Nix (needed for the VM test).
+   `update.yml` sets `nix_path: nixpkgs=channel:nixos-unstable` for the
+   `nix-shell` shebang and takes the PR title from `update.sh`'s last line.
 
 7. `README.md`: what it is, flake input usage, a minimal module example,
    an option table (copy from the spec), a `settings`/`environment`

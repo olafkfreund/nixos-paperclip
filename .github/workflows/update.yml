@@ -1,0 +1,36 @@
+name: Update
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          # update.sh uses a nix-shell shebang, which needs <nixpkgs>.
+          nix_path: nixpkgs=channel:nixos-unstable
+      - id: update
+        run: |
+          msg=$(./update.sh | tail -n 1)
+          echo "$msg"
+          # "updated paperclip: <old> -> <new>" becomes the PR title; empty when up to date.
+          case "$msg" in
+            "updated "*) echo "title=${msg#updated }" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          # PRs opened with GITHUB_TOKEN do not trigger CI; set UPDATE_TOKEN to a PAT or app token.
+          token: ${{ secrets.UPDATE_TOKEN || github.token }}
+          branch: update/paperclip
+          title: ${{ steps.update.outputs.title }}
+          commit-message: ${{ steps.update.outputs.title }}
+          body: Automated update of the Paperclip npm package.
